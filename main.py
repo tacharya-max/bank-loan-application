@@ -31,7 +31,7 @@ loan_applications = [
 
 @app.get("/")
 def home():
-    return {"message": "Welcome to Bank Loan Application"}
+    return {"message": "Hello"}
 
 @app.get("/loan-applications/search")
 def search_loan_applications(loan_type: str = None):
