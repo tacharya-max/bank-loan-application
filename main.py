@@ -1,12 +1,8 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 
 app = FastAPI()
 
-class LoanApplication(BaseModel):
-    applicant_name: str
-    loan_amount: int
-    loan_type: str
+
 
 loan_applications = [
     {
@@ -66,11 +62,3 @@ def customer_loan(name:str , amount:int):
 result = customer_loan("Amit",60000)
 print(result)
     
-
-
-@app.post("/loan-applications")
-def create_loan_application(loan:LoanApplication):
-    return {
-        "message":"Loan app received",
-        "application":loan
-    }
