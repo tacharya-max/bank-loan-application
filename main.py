@@ -1,6 +1,26 @@
 from fastapi import FastAPI
+from pydantic import BaseModel,Field
 
 app = FastAPI()
+
+class Address(BaseModel):
+    city: str
+    state: str
+    pincode: int
+
+class LoanApplication(BaseModel):
+    applicant_name: str = Field(min_length=3,max_length=50)
+    middle_name: str | None = None
+    loan_type: str
+    loan_amount: float = Field(gt=0)
+    address: Address
+
+class LoanResponse(BaseModel):
+    application_id: int
+    applicant_name: str
+    loan_type: str
+    loan_amount: float
+    loan_status: str    
 
 
 
@@ -9,19 +29,22 @@ loan_applications = [
         "application_id": 1,
         "applicant_name": "Rahul",
         "loan_type": "Personal Loan",
-        "loan_amount": 500000
+        "loan_amount": 500000,
+        "loan_status": "Pending"
     },
     {
         "application_id": 2,
         "applicant_name": "Amit",
         "loan_type": "Home Loan",
-        "loan_amount": 1000000
+        "loan_amount": 1000000,
+        "loan_status": "Pending"
     },
     {
         "application_id": 3,
         "applicant_name": "Priya",
         "loan_type": "Education Loan",
-        "loan_amount": 300000
+        "loan_amount": 300000,
+        "loan_status": "Pending"
     }
 ]
 
@@ -40,7 +63,7 @@ def search_loan_applications(loan_type: str = None):
 
     return result  
 
-@app.get("/loan-applications")
+@app.get("/loan-applications", response_model=list[LoanResponse])
 def get_loan_applications():
     return loan_applications
 
@@ -57,6 +80,17 @@ def customer_loan(name:str , amount:int):
     return {
         "customer_name":name,
         "loan_amount":amount
+    }
+
+@app.post("/loan-applications", response_model=LoanResponse)
+def create_loan(loan: LoanApplication):
+    return {
+        "application_id": 101,
+        "applicant_name": loan.applicant_name,
+        "loan_type": loan.loan_type,
+        "loan_amount": loan.loan_amount,
+        "loan_status": "Pending",
+        "internal_notes": "Verification not completed"
     }
 
 result = customer_loan("Amit",60000)
