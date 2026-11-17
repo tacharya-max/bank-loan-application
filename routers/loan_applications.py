@@ -1,45 +1,28 @@
 
-from fastapi import APIRouter, HTTPException,Response,Header,Cookie
-from schemas.loan import LoanApplication, LoanResponse, LoanStatusUpdate
+from fastapi import APIRouter, HTTPException,Response,Header,Cookie,Depends
+from schemas.loan import LoanCreate, LoanResponse, LoanStatusUpdate, LoanUpdate
+from sqlalchemy.orm import Session
+from database import get_db
+from models.loan_application import LoanApplication as LoanApplicationModel
+
 
 router = APIRouter()
 
 
-loan_applications = [
-    {
-        "application_id": 1,
-        "applicant_name": "Rahul",
-        "loan_type": "Personal Loan",
-        "loan_amount": 500000,
-        "loan_status": "Pending"
-    },
-    {
-        "application_id": 2,
-        "applicant_name": "Amit",
-        "loan_type": "Home Loan",
-        "loan_amount": 1000000,
-        "loan_status": "Pending"
-    },
-    {
-        "application_id": 3,
-        "applicant_name": "Priya",
-        "loan_type": "Education Loan",
-        "loan_amount": 300000,
-        "loan_status": "Pending"
-    }
-]
 
+@router.get("/search", response_model=list[LoanResponse])
+def search_loan_applications(
+    loan_type: str = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(LoanApplicationModel)
 
-@router.get("/search")
-def search_loan_applications(loan_type: str = None):
+    if loan_type is not None:
+        query = query.filter(
+            LoanApplicationModel.loan_type.ilike(f"%{loan_type}%")
+        )
 
-    result = []
-
-    for loan in loan_applications:
-        if loan_type is None or loan["loan_type"].lower() == loan_type.lower():
-            result.append(loan)
-
-    return result
+    return query.all()
 
 @router.get("/profile")
 def get_profile(authorization: str = Header(None)):
@@ -78,96 +61,168 @@ def check_cookie(user_token: str = Cookie(None)):
 
 
 @router.get("/", response_model=list[LoanResponse])
-def get_loan_applications():
-    return loan_applications
+def get_loan_applications(db: Session = Depends(get_db)):
+    loans = db.query(LoanApplicationModel).all()
+    return loans
 
 
 @router.get("/{application_id}", response_model=LoanResponse)
-def get_single_loan_application(application_id: int):
+def get_single_loan_application(application_id: int, db:Session = Depends(get_db)):
+    loan = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.application_id == application_id
+    ).first()
 
-    for loan in loan_applications:
-        if loan["application_id"] == application_id:
-            return loan
+    if loan is None:
 
-    raise HTTPException(
+        raise HTTPException(
         status_code=404,
         detail="Loan application not found"
     )
+    return loan
 
 
 
 
 @router.post("/", response_model=LoanResponse, status_code=201)
-def create_loan(loan: LoanApplication):
+def create_loan(loan: LoanCreate, db: Session = Depends(get_db)):
 
-    new_loan = {
-        "application_id": 101,
-        "applicant_name": loan.applicant_name,
-        "loan_type": loan.loan_type,
-        "loan_amount": loan.loan_amount,
-        "loan_status": "Pending",
-        "internal_notes": "Verification not completed"
-    }
+    new_loan = LoanApplicationModel(
+        user_id = loan.user_id,
+        loan_type = loan.loan_type,
+        loan_amount = loan.loan_amount,
+        loan_status = "Pending",
+        city = loan.address.city,
+        state = loan.address.state,
+        pincode = loan.address.pincode
+    )
 
-    loan_applications.append(new_loan)
+    db.add(new_loan)
+    db.commit()
+    db.refresh(new_loan)
 
     return new_loan
 
 
-@router.put("/{application_id}")
-def replace_loan(application_id: int, loan: LoanApplication):
 
-    for index,existing_loan in enumerate(loan_applications):
+@router.put("/{application_id}", response_model=LoanResponse)
+def replace_loan(
+    application_id: int,
+    loan: LoanCreate,
+    db: Session = Depends(get_db)
+):
+    # Step 1: Find existing loan from database
+    existing_loan = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.application_id == application_id
+    ).first()
 
-        if existing_loan["application_id"] == application_id:
+    if existing_loan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loan application not found"
+        )
 
-            updated_loan = {
-                "application_id": application_id,
-                "applicant_name": loan.applicant_name,
-                "loan_type": loan.loan_type,
-                "loan_amount": loan.loan_amount,
-                "loan_status": existing_loan["loan_status"],
-                "address": loan.address.model_dump()
-            }
+    existing_loan.user_id = loan.user_id
+    existing_loan.loan_type = loan.loan_type
+    existing_loan.loan_amount = loan.loan_amount
+    existing_loan.city = loan.address.city
+    existing_loan.state = loan.address.state
+    existing_loan.pincode = loan.address.pincode
 
-            loan_applications[index] = updated_loan
-            return updated_loan
+   
+    db.commit()
+    db.refresh(existing_loan)
 
-    raise HTTPException(
-        status_code=404,
-        detail="Loan application not found"
-    )    
+   
+    return existing_loan
+    
 
 
-@router.patch("/{application_id}/status")
+@router.patch("/{application_id}/status", response_model=LoanResponse)
 def update_loan_status(
     application_id:int,
-    update: LoanStatusUpdate
+    update: LoanStatusUpdate,
+    db: Session = Depends(get_db)
 ):
-    for loan in loan_applications:
 
-        if loan["application_id"] == application_id:
-            loan["loan_status"] = update.loan_status
-            return loan
+    existing_loan = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.application_id == application_id
+    ).first()
 
-    raise HTTPException(
-        status_code=404,
-        detail="Loan application not found"
-    )
+    if existing_loan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loan application not found"
+        )
+
+    existing_loan.loan_status = update.loan_status
+
+    db.commit()
+    db.refresh(existing_loan)
+
+    return existing_loan
+
+
+
+@router.patch("/{application_id}", response_model=LoanResponse)
+def update_loan_application(
+    application_id: int,
+    loan: LoanUpdate,
+    db: Session = Depends(get_db)
+):
+    # Step 1: Find existing loan
+    existing_loan = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.application_id == application_id
+    ).first()
+
+    
+    if existing_loan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loan application not found"
+        )
+
+    
+    update_data = loan.model_dump(exclude_unset=True)
+
+    
+    if "address" in update_data:
+        address = update_data.pop("address")
+
+        if address is not None:
+            existing_loan.city = address["city"]
+            existing_loan.state = address["state"]
+            existing_loan.pincode = address["pincode"]
+
+    
+    for field, value in update_data.items():
+        if value is not None:
+            setattr(existing_loan, field, value)
+
+    
+    db.commit()
+    db.refresh(existing_loan)
+
+    return existing_loan
+
 
 
 @router.delete("/{application_id}", status_code=204)
-def delete_loan(application_id: int):
+def delete_loan(application_id: int, db: Session = Depends(get_db)):
+    existing_loan = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.application_id == application_id
+    ).first()
 
-    for index, loan in enumerate(loan_applications):
-        if loan["application_id"] == application_id:
-            loan_applications.pop(index)
-            return Response(status_code=204)
+    if existing_loan is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loan application not found"
+        )
 
-    raise HTTPException(
-        status_code=404,
-        detail="Loan application not found"
-    )       
+    db.delete(existing_loan)
+    db.commit()
+    return Response(status_code=204)
+
+        
 
 
 

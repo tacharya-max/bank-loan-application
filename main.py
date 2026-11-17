@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from database import get_db
+from models.user import User
+from models.loan_application import LoanApplication
 
 from routers.loan_applications import router as loan_router
 from routers.loan_status import router as status_router
