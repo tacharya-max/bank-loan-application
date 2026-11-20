@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from decimal import Decimal
+from typing import Literal
 
 class Address(BaseModel):
     city: str
@@ -8,7 +9,6 @@ class Address(BaseModel):
 
 
 class LoanCreate(BaseModel):
-    user_id: int
     loan_type: str
     loan_amount: Decimal = Field(gt=0)
     address: Address
@@ -31,7 +31,7 @@ class LoanUpdate(BaseModel):
     address: Address | None = None  
 
 class LoanStatusUpdate(BaseModel):
-    loan_status: str    
+    loan_status: Literal["pending", "Approved", "Rejected"]    
 
 
 

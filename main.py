@@ -9,6 +9,7 @@ from models.loan_application import LoanApplication
 
 from routers.loan_applications import router as loan_router
 from routers.loan_status import router as status_router
+from routers.auth import router as auth_router
 
 
 app = FastAPI()
@@ -41,4 +42,10 @@ app.include_router(
     status_router,
     prefix="/loan-status",
     tags=["Loan status"]
+)
+
+app.include_router(
+    auth_router,
+    prefix="/auth",
+    tags=["Authentication"]
 )

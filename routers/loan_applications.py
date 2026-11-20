@@ -4,6 +4,8 @@ from schemas.loan import LoanCreate, LoanResponse, LoanStatusUpdate, LoanUpdate
 from sqlalchemy.orm import Session
 from database import get_db
 from models.loan_application import LoanApplication as LoanApplicationModel
+from utils.auth_dependency import get_current_user
+from models.user import User
 
 
 router = APIRouter()
@@ -61,15 +63,22 @@ def check_cookie(user_token: str = Cookie(None)):
 
 
 @router.get("/", response_model=list[LoanResponse])
-def get_loan_applications(db: Session = Depends(get_db)):
-    loans = db.query(LoanApplicationModel).all()
+def get_loan_applications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)):
+    loans = db.query(LoanApplicationModel).filter(
+        LoanApplicationModel.user_id == current_user.id).all()
     return loans
 
 
 @router.get("/{application_id}", response_model=LoanResponse)
-def get_single_loan_application(application_id: int, db:Session = Depends(get_db)):
+def get_single_loan_application(
+    application_id: int, db:Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)):
+
     loan = db.query(LoanApplicationModel).filter(
-        LoanApplicationModel.application_id == application_id
+        LoanApplicationModel.application_id == application_id,
+        LoanApplicationModel.user_id == current_user.id
     ).first()
 
     if loan is None:
@@ -84,10 +93,11 @@ def get_single_loan_application(application_id: int, db:Session = Depends(get_db
 
 
 @router.post("/", response_model=LoanResponse, status_code=201)
-def create_loan(loan: LoanCreate, db: Session = Depends(get_db)):
+def create_loan(loan: LoanCreate, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
 
     new_loan = LoanApplicationModel(
-        user_id = loan.user_id,
+        user_id = current_user.id,
         loan_type = loan.loan_type,
         loan_amount = loan.loan_amount,
         loan_status = "Pending",
@@ -108,11 +118,13 @@ def create_loan(loan: LoanCreate, db: Session = Depends(get_db)):
 def replace_loan(
     application_id: int,
     loan: LoanCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user  : User = Depends(get_current_user)
 ):
     # Step 1: Find existing loan from database
     existing_loan = db.query(LoanApplicationModel).filter(
-        LoanApplicationModel.application_id == application_id
+        LoanApplicationModel.application_id == application_id,
+        LoanApplicationModel.user_id == current_user.id
     ).first()
 
     if existing_loan is None:
@@ -121,7 +133,6 @@ def replace_loan(
             detail="Loan application not found"
         )
 
-    existing_loan.user_id = loan.user_id
     existing_loan.loan_type = loan.loan_type
     existing_loan.loan_amount = loan.loan_amount
     existing_loan.city = loan.address.city
@@ -131,35 +142,8 @@ def replace_loan(
    
     db.commit()
     db.refresh(existing_loan)
-
-   
     return existing_loan
     
-
-
-@router.patch("/{application_id}/status", response_model=LoanResponse)
-def update_loan_status(
-    application_id:int,
-    update: LoanStatusUpdate,
-    db: Session = Depends(get_db)
-):
-
-    existing_loan = db.query(LoanApplicationModel).filter(
-        LoanApplicationModel.application_id == application_id
-    ).first()
-
-    if existing_loan is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Loan application not found"
-        )
-
-    existing_loan.loan_status = update.loan_status
-
-    db.commit()
-    db.refresh(existing_loan)
-
-    return existing_loan
 
 
 
@@ -167,24 +151,22 @@ def update_loan_status(
 def update_loan_application(
     application_id: int,
     loan: LoanUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Step 1: Find existing loan
     existing_loan = db.query(LoanApplicationModel).filter(
-        LoanApplicationModel.application_id == application_id
+        LoanApplicationModel.application_id == application_id,
+        LoanApplicationModel.user_id == current_user.id
     ).first()
 
-    
     if existing_loan is None:
         raise HTTPException(
             status_code=404,
             detail="Loan application not found"
         )
 
-    
     update_data = loan.model_dump(exclude_unset=True)
 
-    
     if "address" in update_data:
         address = update_data.pop("address")
 
@@ -193,12 +175,10 @@ def update_loan_application(
             existing_loan.state = address["state"]
             existing_loan.pincode = address["pincode"]
 
-    
     for field, value in update_data.items():
         if value is not None:
             setattr(existing_loan, field, value)
 
-    
     db.commit()
     db.refresh(existing_loan)
 
@@ -207,9 +187,14 @@ def update_loan_application(
 
 
 @router.delete("/{application_id}", status_code=204)
-def delete_loan(application_id: int, db: Session = Depends(get_db)):
+def delete_loan(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     existing_loan = db.query(LoanApplicationModel).filter(
-        LoanApplicationModel.application_id == application_id
+        LoanApplicationModel.application_id == application_id,
+        LoanApplicationModel.user_id == current_user.id
     ).first()
 
     if existing_loan is None:
@@ -220,6 +205,7 @@ def delete_loan(application_id: int, db: Session = Depends(get_db)):
 
     db.delete(existing_loan)
     db.commit()
+
     return Response(status_code=204)
 
         
