@@ -5,7 +5,7 @@ from typing import Literal
 class Address(BaseModel):
     city: str
     state: str
-    pincode: str = Field(min_length=6, max_length=6)
+    pincode: str = Field(pattern=r"^\d{6}$")
 
 
 class LoanCreate(BaseModel):
@@ -31,7 +31,7 @@ class LoanUpdate(BaseModel):
     address: Address | None = None  
 
 class LoanStatusUpdate(BaseModel):
-    loan_status: Literal["pending", "Approved", "Rejected"]    
+    loan_status: Literal["Pending", "Approved", "Rejected"]
 
 
 

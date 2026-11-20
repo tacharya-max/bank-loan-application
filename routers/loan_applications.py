@@ -12,12 +12,25 @@ router = APIRouter()
 
 
 
+
 @router.get("/search", response_model=list[LoanResponse])
 def search_loan_applications(
     loan_type: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     query = db.query(LoanApplicationModel)
+
+    if current_user.role == "applicant":
+        query = query.filter(
+            LoanApplicationModel.user_id == current_user.id
+        )
+
+    elif current_user.role not in ["loan_officer", "admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to search loan applications"
+        )
 
     if loan_type is not None:
         query = query.filter(
@@ -26,10 +39,17 @@ def search_loan_applications(
 
     return query.all()
 
+
+
 @router.get("/profile")
-def get_profile(authorization: str = Header(None)):
+def get_profile(
+    current_user: User = Depends(get_current_user)
+):
     return {
-        "authorization_token": authorization
+        "id": current_user.id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role
     }
 
 
